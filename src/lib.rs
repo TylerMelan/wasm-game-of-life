@@ -3,11 +3,38 @@ mod utils;
 use wasm_bindgen::prelude::*;
 use std::fmt;
 
+extern crate js_sys;
+extern crate web_sys;
+use web_sys::console;
+
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
 #[cfg(feature = "wee_alloc")]
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
+macro_rules! log {
+    ( $( $t:tt )* ) => {
+        web_sys::console::log_1(&format!( $( $t )* ).into());
+    }
+}
+
+pub struct Timer<'a> {
+    name: &'a str,
+}
+
+impl<'a> Timer<'a> {
+    pub fn new(name: &'a str) -> Timer<'a> {
+        console::time_with_label(name);
+        Timer { name }
+    }
+}
+
+impl<'a> Drop for Timer<'a> {
+    fn drop(&mut self) {
+        console::time_end_with_label(self.name);
+    }
+}
 
 #[wasm_bindgen]
 #[repr(u8)]
@@ -15,6 +42,15 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 pub enum Cell {
     Dead = 0,
     Alive = 1,
+}
+
+impl Cell {
+    fn toggle(&mut self) {
+        *self = match *self {
+            Cell::Dead => Cell::Alive,
+            Cell::Alive => Cell::Dead,
+        };
+    }
 }
 
 #[wasm_bindgen]
@@ -26,7 +62,14 @@ pub struct Universe {
 
 #[wasm_bindgen]
 impl Universe {
+
+    pub fn toggle_cell(&mut self, row: u32, column: u32) {
+        let idx = self.get_index(row, column);
+        self.cells[idx].toggle();
+    }
+
     pub fn tick(&mut self) {
+        // let _timer = Timer::new("Universe::tick");
         let mut next = self.cells.clone();
 
         for row in 0..self.height {
@@ -81,12 +124,14 @@ impl Universe {
     }
 
     pub fn new() -> Universe {
+        utils::set_panic_hook();
+
         let width = 64;
         let height = 64;
 
         let cells = (0..width * height)
             .map(|i| {
-                if i % 2 == 0 || i % 7 == 0 {
+                if js_sys::Math::random() < 0.5 {
                     Cell::Alive
                 } else {
                     Cell::Dead
@@ -103,6 +148,18 @@ impl Universe {
 
     pub fn render(&self) -> String {
         self.to_string()
+    }
+
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    pub fn cells(&self) -> *const Cell {
+        self.cells.as_ptr()
     }
 }
 
